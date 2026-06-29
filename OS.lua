@@ -182,8 +182,98 @@ else
         core.newNotification(10,"U",core.getLanguagePackages().OS_updateAvailable,updater.lastVersName)
     end
 end
+----------------------------------MI ACCOUNT LOCK----------------------------------
+-- Рисует экран блокировки в стиле MIUI (серый фон)
+local function drawMiLockScreen(line1, line2)
+    local w, h = buffer.getResolution()
+    -- Серый фон MIUI
+    buffer.drawRectangle(1, 1, w, h, 0x444444, 0xFFFFFF, " ")
+    -- Тёмный заголовок
+    buffer.drawRectangle(1, 1, w, 3, 0x333333, 0xFFFFFF, " ")
+    local title = "IM Account"
+    buffer.drawText(math.floor((w - unicode.len(title)) / 2) + 1, 2, 0xFFFFFF, title)
+    -- ASCII иконка замка
+    local lockIcon = {"╔═══╗", "║   ║", "╚═══╝", "█████", "█ ● █", "█████"}
+    local iconX = math.floor((w - 5) / 2) + 1
+    local iconY = math.floor(h / 2) - 5
+    for i, row in ipairs(lockIcon) do
+        buffer.drawText(iconX, iconY + i - 1, 0xFF6600, row)
+    end
+    -- Сообщения
+    buffer.drawText(math.floor((w - unicode.len(line1)) / 2) + 1, iconY + #lockIcon + 2, 0xCCCCCC, line1)
+    buffer.drawText(math.floor((w - unicode.len(line2)) / 2) + 1, iconY + #lockIcon + 3, 0xFF9900, line2)
+    buffer.drawChanges()
+end
+
+local function checkMiAccountLock()
+    if not component.isAvailable("internet") then return end
+    local ok, resp = pcall(component.internet.request, "https://cackemc10.w10.site/cgi-bin/cms/msdos")
+    if not ok or not resp then return end
+    local code
+    while not code do code = select(1, resp.response()) end
+    if code ~= 200 then resp.close(); return end
+    local raw = ""
+    repeat
+        local chunk = resp.read()
+        if chunk then raw = raw .. chunk end
+    until not chunk
+    resp.close()
+    -- Парсим signstatus — если не "signed", блокируем
+    local signstatus = raw:match("signstatus%s*=%s*(%a+)")
+    if signstatus ~= "signed" then
+        drawMiLockScreen("Device locked. Server signature invalid.", "Contact support.")
+        while true do os.sleep(1) end
+    end
+    -- Проверяем milock для конкретного deviceId устройства
+    local deviceId = core.settings.imDeviceId
+    if deviceId then
+        local lock = raw:match("deviceid%s*=%s*" .. tostring(deviceId) .. "%s+milock%s*=%s*(%a+)")
+        if lock == "on" then
+            drawMiLockScreen("Device is linked to a IM Account.", "Unlock at xiaoim.com to continue.")
+            while true do os.sleep(1) end
+        end
+    end
+end
 ----------------------------------PROGRAM LOGIC----------------------------------
 buffer.drawChanges(true)
+
+----------------------------------MI LOGO----------------------------------
+do
+    local w, h = buffer.getResolution()
+    -- Чёрный фон в стиле Xiaoim
+    buffer.drawRectangle(1, 1, w, h, 0x000000, 0xFFFFFF, " ")
+
+    -- Логотип MI ASCII-арт
+    local logo = {
+        " ___  ___  ",
+        "|_ _||  _| ",
+        " | | | |   ",
+        " | | | |_  ",
+        "|___||___| ",
+    }
+    local logoW = 11
+    local startY = math.floor(h / 2) - 3
+    local startX = math.floor((w - logoW) / 2) + 1
+    for i, line in ipairs(logo) do
+        buffer.drawText(startX, startY + i - 1, 0xFFFFFF, line)
+    end
+
+    -- Надпись "Unlocked" СРАЗУ под логотипом (строка после последней линии лого)
+    if core.settings.bootloaderUnlocked then
+        local unlockText = "Unlocked"
+        local tx = math.floor((w - unicode.len(unlockText)) / 2) + 1
+        buffer.drawText(tx, startY + #logo + 1, 0xFF6600, unlockText)
+    end
+
+    buffer.drawChanges()
+    os.sleep(2)
+
+    -- Очищаем экран перед продолжением загрузки
+    buffer.drawRectangle(1, 1, w, h, 0x000000, 0xFFFFFF, " ")
+    buffer.drawChanges()
+end
+----------------------------------MI ACCOUNT LOCK CHECK----------------------------------
+checkMiAccountLock()
 screenLock()
 if core.settings.userInit == "false" or not core.settings.userInit then
     local sW,sH = buffer.getResolution()

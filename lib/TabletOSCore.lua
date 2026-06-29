@@ -27,8 +27,9 @@ local settingsProxy = { -- СЮДА МЕТАТАБЛИЦУ НЕ СТАВИТЬ!
 }
 setmetatable(core.settings,{
   __index = function(self, key)
-    if not settingsProxy[key] then settingsProxy[key] = core[key] end
-    return settingsProxy[key]
+    -- НЕ записываем в proxy при чтении — это портило settings.bin
+    if settingsProxy[key] ~= nil then return settingsProxy[key] end
+    return core[key] -- читаем из core только как fallback, без записи
   end,
   __newindex = function(self,key,value)
     rawset(settingsProxy,key,value)

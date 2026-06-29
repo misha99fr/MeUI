@@ -130,5 +130,19 @@ local timezone,index = processList({
 },timezones)
 core.settings.timezone = index-13
 
+-- Шаг: ввод Device ID для IM Account
+do
+    buffer.drawRectangle(1,5,sW,sH-3,theme.sandbox.background,0x0," ")
+    graphics.centerText(sW/2, 6, theme.sandbox.foreground, "IM Account")
+    graphics.centerText(sW/2, 8, theme.sandbox.foreground, "Введите Device ID устройства")
+    graphics.centerText(sW/2, 9, theme.sandbox.foreground, "для привязки IM Account Lock.")
+    graphics.centerText(sW/2, 11, theme.sandbox.foreground, "(оставьте пустым, чтобы пропустить)")
+    buffer.drawChanges()
+    local devId = graphics.drawEdit("IM Account", {"Device ID (или Enter чтобы пропустить)"})
+    if devId and devId ~= "" then
+        core.settings.imDeviceId = devId
+    end
+end
+
 core.settings.userInit = true
 buffer.setDrawLimit(1,1,sW,sH)
