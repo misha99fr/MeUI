@@ -1,4 +1,4 @@
-# TabletOS Stable Channel
+# MeUI Stable Channel
 
 Стабильный канал обновлений. Подходит для обычного пользователя
 
