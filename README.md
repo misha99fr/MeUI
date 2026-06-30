@@ -1,6 +1,12 @@
 # MeUI Stable Channel
 
 Стабильный канал обновлений. Подходит для обычного пользователя
+<img width="1364" height="869" alt="image" src="https://github.com/user-attachments/assets/43551b5d-ae33-41e6-96ef-1632a5e65e76" />
+<img width="335" height="78" alt="image" src="https://github.com/user-attachments/assets/b1c2f4d6-a16a-4260-8e20-967b1936e718" />
+<img width="1350" height="861" alt="image" src="https://github.com/user-attachments/assets/0411b9fa-f828-4ea7-95a8-552012b920f7" />
+<img width="1376" height="893" alt="image" src="https://github.com/user-attachments/assets/7acd5b50-06bf-49e4-a9c1-8cbefeb77836" />
+
+
 
 ## Изменения в этой сборке(2.0)
 
