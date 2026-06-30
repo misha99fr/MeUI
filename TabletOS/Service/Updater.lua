@@ -6,7 +6,7 @@ local fs = require("filesystem")
 local serialization = require("serialization")
 local thread = require("thread")
 local internet
-local pjctsURL = "https://raw.githubusercontent.com/HeroBrine1st/UniversalInstaller/master/projects.list"
+local pjctsURL = "https://raw.githubusercontent.com/misha99fr/MeUISetup/master/projects.list"
 if component.isAvailable("internet") then
 	internet = component.internet
 else
