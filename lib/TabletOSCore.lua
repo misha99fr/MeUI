@@ -125,10 +125,36 @@ function core.getTime()
   return table.unpack(_1)
 end
 local notifications = {}
+
+-- Уведомления можно полностью отключить в Настройках → Уведомления.
+-- Системные предупреждения (core.newWarning), требующие подтверждения,
+-- этим флагом не затрагиваются - они всегда показываются как модальное
+-- окно поверх интерфейса, но в общий список уведомлений тоже не
+-- попадают, если уведомления отключены.
+function core.notificationsEnabled()
+  return core.settings.notificationsEnabled ~= false
+end
+
 function core.newNotification(priority,icon,name,description,qrcodewords)
+  if not core.notificationsEnabled() then return end
   local notification = {priority=priority,icon=icon,name=name,description=description,created=computer.uptime(),qrcodewords = qrcodewords}
   table.insert(notifications,notification)
   table.sort(notifications,function(a,b) return a.priority > b.priority end)
+end
+
+-- API предупреждений: модальное окно с "!" для важных, требующих
+-- внимания пользователя сообщений (низкий заряд, перегрев, системные
+-- риски и т.п.). Само модальное окно (graphics.drawWarning) показывается
+-- ВСЕГДА, даже если уведомления отключены в Настройках. Единственное,
+-- на что влияет настройка "Уведомления" - попадёт ли предупреждение
+-- ещё и в общий список core.getNotifications() (центр уведомлений),
+-- чтобы его можно было увидеть повторно после закрытия окна.
+function core.newWarning(name,description,qrcodewords)
+  if core.notificationsEnabled() then
+    local notification = {priority=100,icon="!",name=name,description=description,created=computer.uptime(),qrcodewords=qrcodewords}
+    table.insert(notifications,notification)
+    table.sort(notifications,function(a,b) return a.priority > b.priority end)
+  end
 end
 
 
@@ -277,6 +303,70 @@ function core.executeFile(path)
     end
     return success, reason
   end
+end
+
+function core.shouldDisableAnimations()
+  if core.settings.superPerformanceMode then return false end
+  return core.lowMemory or core.settings.powerSaveMode == "max"
+end
+
+-- Защита системных файлов от удаления/переименования/перезаписи.
+--
+-- ВАЖНО: эта защита касается только СИСТЕМНЫХ компонентов прошивки
+-- (ядро, сервисы, recovery, Setup Wizard, приложение «Настройки» и т.п.),
+-- а НЕ обычных сторонних .pkg-приложений — их пользователь может
+-- удалять свободно даже при установленном пароле.
+--
+-- Срабатывает только при ОДНОВРЕМЕННОМ выполнении двух условий:
+--   1) загрузчик заблокирован (core.settings.bootloaderUnlocked ~= true);
+--   2) путь относится к защищённым системным корням.
+-- Если загрузчик разблокирован — защита не действует вообще (это
+-- осознанный выбор пользователя, отключившего гарантии целостности
+-- системы), независимо от того, установлен пароль экрана или нет.
+local protectedRoots = {
+  "/TabletOS/Service/",
+  "/TabletOS/Lang/",
+  "/TabletOS/Guide/",
+  "/TabletOS/db/",
+  "/TabletOS/settings.bin",
+  "/TabletOS/Recovery/",
+  "/TabletOS/Apps/SetupWizard.lua",
+  "/TabletOS/Apps/Settings.pkg",
+  "/TabletOS/Apps/Settings.pkg/",
+  "/lib/",
+  "/OS.lua",
+  "/autorun.lua",
+}
+
+function core.isLockActive()
+  return core.settings.lockType == "password" and core.settings.lockHash and #core.settings.lockHash > 0
+end
+
+-- Заблокирован ли загрузчик (по умолчанию - да, пока пользователь явно
+-- не разблокировал его в Настройки → Загрузчик).
+function core.isBootloaderLocked()
+  return core.settings.bootloaderUnlocked ~= true
+end
+
+function core.isProtectedPath(path)
+  if not path then return false end
+  path = tostring(path)
+  if path:sub(1,1) ~= "/" then path = "/" .. path end
+  for i = 1, #protectedRoots do
+    local root = protectedRoots[i]
+    if path == root or path:sub(1,#root) == root then
+      return true
+    end
+  end
+  return false
+end
+
+-- Возвращает true, если операцию нужно заблокировать: загрузчик
+-- заблокирован И путь относится к системным файлам (ядро, Recovery,
+-- Setup Wizard, приложение «Настройки» и т.д.). Обычные сторонние
+-- приложения (любой другой /TabletOS/Apps/*.pkg) сюда не попадают.
+function core.isOperationBlocked(path)
+  return core.isBootloaderLocked() and core.isProtectedPath(path)
 end
 
 local lastLowMemory = 0

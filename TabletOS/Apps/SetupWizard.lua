@@ -130,6 +130,36 @@ local timezone,index = processList({
 },timezones)
 core.settings.timezone = index-13
 
+-- Шаг: выбор модели устройства
+local deviceModels = {
+	"XiaoIM Pad 4",
+	"XiaoIM Pad 4 Pro",
+	"RedIM Pad 1 Lite",
+}
+local selectedModel,modelIndex = processList({
+	label = "Выберите модель устройства",
+	helpWindowContent = {"Используйте колесико мыши или стрелочки вверх/вниз для выбора элемента"},
+	helpButtonLabel = "Помощь",
+	nextButtonLabel = "Далее>",
+},deviceModels)
+core.settings.deviceModel = deviceModels[modelIndex]
+
+-- Шаг: ввод имени устройства
+do
+	buffer.drawRectangle(1,5,sW,sH-3,theme.sandbox.background,0x0," ")
+	graphics.centerText(sW/2, 6, theme.sandbox.foreground, "Имя устройства")
+	graphics.centerText(sW/2, 8, theme.sandbox.foreground, "Введите имя для вашего устройства.")
+	graphics.centerText(sW/2, 9, theme.sandbox.foreground, "Оно будет видно другим в сети.")
+	buffer.drawChanges()
+	local defaultName = core.settings.deviceModel or "MeUI Device"
+	local deviceName = graphics.drawEdit("Имя устройства", {"Введите имя устройства"}, defaultName)
+	if deviceName and deviceName ~= "" then
+		core.settings.deviceName = deviceName
+	else
+		core.settings.deviceName = defaultName
+	end
+end
+
 -- Шаг: ввод Device ID для IM Account
 do
     buffer.drawRectangle(1,5,sW,sH-3,theme.sandbox.background,0x0," ")

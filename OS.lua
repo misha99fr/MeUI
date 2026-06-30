@@ -21,6 +21,9 @@ end
 
 local backgrounds = {{0x888888,0xFFFFFF},
                      {0x555555,0xFFFFFF}}
+local iconColors = {0xE57373,0x64B5F6,0x81C784,0xFFD54F,0xBA68C8,0xFF8A65,0x4DB6AC,0xF06292,0x9575CD,0x90A4AE}
+local iconW = 14   -- ширина ячейки иконки на сетке рабочего стола
+local iconH = 4    -- высота ячейки (отступ + плашка-кружок + подпись)
 local buttonW = 20
 local buttonH = 1
 local keysConvertTable = {
@@ -62,17 +65,57 @@ getActionFromKeys = function(downkeys,_hotkeys)
     end
 end
 
+local function iconColorFor(name)
+    local sum = 0
+    for i = 1, #name do
+        sum = sum + name:byte(i)
+    end
+    return iconColors[(sum % #iconColors) + 1]
+end
+
+-- Рисует одну иконку приложения/файла/папки: кружок-плашка с первой буквой сверху, подпись снизу.
+local function drawIconCell(x,y,w,name,displayName,isFolder)
+    local letter
+    if name == ".." then
+        letter = "<"
+    else
+        letter = unicode.sub(name,1,1)
+        if letter == "" then letter = "?" end
+        letter = unicode.upper(letter)
+    end
+    local circleColor = isFolder and 0xFFC107 or iconColorFor(name)
+    local circleW = 3
+    local circleX = x + math.floor((w - circleW) / 2)
+    -- "кружок" иконки - цветная плашка шириной 3 символа с буквой по центру
+    buffer.drawRectangle(circleX,y,circleW,1,circleColor,0xFFFFFF," ")
+    buffer.drawText(circleX+1,y,0xFFFFFF,letter)
+    -- подпись под иконкой
+    local label = displayName
+    local maxLabelLen = w - 1
+    if unicode.len(label) > maxLabelLen then
+        label = unicode.sub(label,1,maxLabelLen-1) .. "…"
+    end
+    local labelX = x + math.floor((w - unicode.len(label)) / 2)
+    buffer.drawText(labelX,y+2,0xFFFFFF,label)
+    local function checkTouch(touchX,touchY)
+        return touchX >= x and touchX <= x+w-1 and touchY >= y and touchY <= y+iconH-1
+    end
+    return checkTouch
+end
+
 local function drawTable(tbl,options)
     options = options or {}
     options.deltaX = options.deltaX or 0
     options.deltaY = options.deltaY or 0
     local w,h = buffer.getResolution()
+    local cols = math.max(1,math.floor(w/iconW))
     local buttons = {}
     for i = 1, #tbl do
-        local x = (i-1)*buttonW%w+1 + options.deltaX
-        local y = math.floor((i-1)*buttonW/w)*buttonH+2 + options.deltaY -- local y = ((i-1)*buttonW//w)*buttonH+2
-        local background,foreground = table.unpack(backgrounds[i%2+1])
-        local touchChecker = graphics.drawButton(x,y,buttonW,buttonH,tbl[i].name,background,foreground)
+        local col = (i-1) % cols
+        local row = math.floor((i-1) / cols)
+        local x = col*iconW+1 + options.deltaX
+        local y = row*iconH+2 + options.deltaY
+        local touchChecker = drawIconCell(x,y,iconW,tbl[i].rawName or tbl[i].name,tbl[i].name,tbl[i].isFolder)
         table.insert(buttons,{check=touchChecker,callback=tbl[i].callback})
     end
     buffer.setDrawLimit(1,1,w,h)
@@ -87,7 +130,9 @@ local function drawDir(dir,page,options)
         files[#files+1] = file
     end
     table.sort(files)
-    local bIOP = (w/buttonW)*(h-3)/buttonH --buttons in one page
+    local cols = math.max(1,math.floor(w/iconW))
+    local rows = math.max(1,math.floor((h-3)/iconH))
+    local bIOP = cols*rows --buttons in one page
     local min = bIOP*(page-1)
     local max = bIOP*page
     local files2 = {}
@@ -97,17 +142,27 @@ local function drawDir(dir,page,options)
     files = nil
     local callbacks = {}
     local prevDir = fs.concat(dir,"..")
-    callbacks[1] = {name="[..]",callback=function() return prevDir end}
+    callbacks[1] = {name="Назад",rawName="..",callback=function() return prevDir end,isFolder=true}
     for i = 1, #files2 do
         local file = files2[i]
         local path = fs.concat(dir,file)
         local callback = function() return path end
-        local name = file:sub(1,buttonW-3) .. (#file > buttonW-3 and "…" or "")
+        local rawName = file
+        local name = file
+        local isFolder = false
         if file:sub(-1,-1) == "/" then
-            file = file:sub(1,-2)
-            name = "[" .. file:sub(1,buttonW-5) .. (#file > buttonW-5 and "…" or "") .. "]"
+            isFolder = true
+            rawName = file:sub(1,-2)
+            name = rawName
+        elseif file:sub(-4) == ".lnk" then
+            name = file:sub(1,-5)
+            rawName = name
+        elseif file:sub(-4) == ".pkg" then
+            isFolder = true
+            rawName = file:sub(1,-2)
+            name = rawName
         end
-        callbacks[#callbacks+1] = {name=name,callback=callback}
+        callbacks[#callbacks+1] = {name=name,rawName=rawName,callback=callback,isFolder=isFolder}
     end
     local buttons = drawTable(callbacks,options)
     graphics.drawButton(1,h-1,w/2,1,core.getLanguagePackages().OS_prevPage,backgrounds[1][1],backgrounds[1][2])
@@ -365,9 +420,17 @@ while true do
                                 local success, reason = core.pcall(dofile,xFile)
                                 errorReport(xFile,success,reason)
                             elseif association == "EDIT" then
-                              os.execute("edit " .. "\"" .. xFile .. "\"")
+                              if core.isOperationBlocked(xFile) then
+                                graphics.drawInfo("Доступ запрещён", {"Это системный файл устройства.", "Изменение запрещено, пока загрузчик заблокирован."})
+                              else
+                                os.execute("edit " .. "\"" .. xFile .. "\"")
+                              end
                             elseif association == "DELETE" then
-                                os.execute("rm \"" .. xFile .. "\" -r")
+                                if core.isOperationBlocked(xFile) then
+                                    graphics.drawInfo("Доступ запрещён", {"Это системный файл устройства.", "Удаление запрещено, пока загрузчик заблокирован."})
+                                else
+                                    os.execute("rm \"" .. xFile .. "\" -r")
+                                end
                             end
                         end
                         buffer.drawChanges(true)

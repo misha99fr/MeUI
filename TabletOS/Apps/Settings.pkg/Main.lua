@@ -121,9 +121,19 @@ for file in fs.list(fs.concat(pkgDir,"Modules")) do
 	local _module = assert(loadfile(_file,_,_,moduleEnv))()
 	table.insert(modules,_module)
 end
-local mainScreen = {}
-for _, _module in pairs(modules) do
-	table.insert(mainScreen,{type="Button",name=_module.name,onClick=_module.onClick})
+local function buildMainScreen()
+	local screen = {}
+	for _, _module in pairs(modules) do
+		if not (_module.hidden and _module.hidden()) then
+			table.insert(screen,{type="Button",name=_module.name,onClick=_module.onClick})
+		end
+	end
+	return screen
 end
-modules = nil
+local mainScreen = buildMainScreen()
+moduleEnv.refreshMainScreen = function()
+	for i = #mainScreen, 1, -1 do mainScreen[i] = nil end
+	local fresh = buildMainScreen()
+	for i = 1, #fresh do mainScreen[i] = fresh[i] end
+end
 setContentView(mainScreen)

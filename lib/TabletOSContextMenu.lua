@@ -10,6 +10,21 @@ local event         =   require "event"
 local a = {}
 local copyingFile
 local cutting
+
+-- Пока загрузчик заблокирован, защищённые системные пути нельзя менять
+-- из файлового менеджера. Сторонние .pkg-приложения под защиту не
+-- попадают и удаляются как обычные файлы независимо от пароля экрана.
+local function denyIfLocked(path)
+    if core.isOperationBlocked(path) then
+        graphics.drawInfo("Доступ запрещён", {
+            "Это системный файл устройства.",
+            "Изменение запрещено, пока загрузчик заблокирован.",
+            "Разблокируйте загрузчик в Настройках или используйте MeUI Recovery.",
+        })
+        return true
+    end
+    return false
+end
 function a.calculateSize(path)
     local size = 0
     for file in fs.list(path) do
@@ -29,6 +44,7 @@ function contextMenu.contextMenuForThis(dir)
             contextMenu = {
                 {name = core.getLanguagePackages().OS_newfile,
                     callback = function()
+                        if denyIfLocked(dir) then return end
                         local file = graphics.drawEdit(core.getLanguagePackages().OS_creatingFile,{core.getLanguagePackages().OS_enterFileName,
                             "",
                             core.getLanguagePackages().OS_enterForEnd})
@@ -44,6 +60,7 @@ function contextMenu.contextMenuForThis(dir)
                 },
                 {name = core.getLanguagePackages().OS_newfolder,
                     callback = function()
+                        if denyIfLocked(dir) then return end
                         local folder = graphics.drawEdit(core.getLanguagePackages().OS_creatingFolder,{core.getLanguagePackages().OS_enterFolderName,
                             "",
                         core.getLanguagePackages().OS_enterForEnd})
@@ -56,6 +73,7 @@ function contextMenu.contextMenuForThis(dir)
         {name = core.getLanguagePackages().OS_paste,
             inactive = not copyingFile,
             callback = function()
+                if denyIfLocked(dir) then return end
                 if copyingFile then
                     local name = fs.name(copyingFile)
                     local newname = name
@@ -77,6 +95,7 @@ function contextMenu.contextMenuForThis(dir)
         {name = core.getLanguagePackages().OS_pastelnk,
             inactive = not copyingFile,
             callback = function()
+                if denyIfLocked(dir) then return end
                 if copyingFile then
                     local f = io.open(fs.concat(dir,fs.name(copyingFile)) .. ".lnk","w")
                     f:write("return \"" .. copyingFile .. "\"")
@@ -103,6 +122,14 @@ function contextMenu.contextMenuForThis(dir)
         {name=""},
         {name=core.getLanguagePackages().OS_executeCommand,
         callback = function()
+            if core.isLockActive() then
+                graphics.drawInfo("Доступ запрещён", {
+                    "Выполнение команд отключено,",
+                    "пока устройство заблокировано.",
+                    "Снимите блокировку экрана, чтобы продолжить.",
+                })
+                return
+            end
             local _tmp = shell.getWorkingDirectory()
             shell.setWorkingDirectory(dir)
             local io_write = io.write
@@ -158,6 +185,7 @@ function contextMenu.contextMenuForDir(xFile)
         },
         {name=core.getLanguagePackages().OS_cut,
             callback = function()
+                if denyIfLocked(xFile) then return end
                 copyingFile = xFile
                 cutting = true
             end,
@@ -165,12 +193,14 @@ function contextMenu.contextMenuForDir(xFile)
         {name=""},
         {name = core.getLanguagePackages().OS_rename,
             callback = function() 
+                if denyIfLocked(xFile) then return end
                 local newName = graphics.drawEdit(core.getLanguagePackages().OS_folderRenaming,{"",core.getLanguagePackages().OS_enterNewFolderName}) 
                 return fs.rename(xFile,fs.concat(fs.path(xFile),newName))
             end 
         },
         {name = core.getLanguagePackages().OS_remove,
             callback = function() 
+                if denyIfLocked(xFile) then return end
                 return os.execute("rm \"" .. xFile .. "\" -r")
             end 
         },
@@ -217,10 +247,14 @@ function contextMenu.contextMenuForFile(xFile)
             end 
         },
         {name=core.getLanguagePackages().OS_edit,
-            callback=function() os.execute("edit " .. "\"" .. xFile .. "\"") buffer.drawChanges(true) return true end
+            callback=function()
+                if denyIfLocked(xFile) then return end
+                os.execute("edit " .. "\"" .. xFile .. "\"") buffer.drawChanges(true) return true
+            end
         },
         {name=core.getLanguagePackages().OS_rewrite,
             callback=function()
+                if denyIfLocked(xFile) then return end
                 fs.remove(xFile)
                 os.execute("edit " .. "\"" .. xFile .. "\"") 
                 buffer.drawChanges(true)
@@ -235,6 +269,7 @@ function contextMenu.contextMenuForFile(xFile)
         },
         {name=core.getLanguagePackages().OS_cut,
             callback = function()
+                if denyIfLocked(xFile) then return end
                 copyingFile = xFile
                 cutting = true
             end,
@@ -242,12 +277,14 @@ function contextMenu.contextMenuForFile(xFile)
         {name=""},
         {name = core.getLanguagePackages().OS_rename,
             callback = function() 
+                if denyIfLocked(xFile) then return end
                 local newName = graphics.drawEdit(core.getLanguagePackages().OS_fileRenaming,{"",core.getLanguagePackages().OS_enterNewFileName},fs.name(xFile)) 
                 return fs.rename(xFile,fs.concat(fs.path(xFile),newName))
             end 
         },
         {name = core.getLanguagePackages().OS_remove,
             callback = function() 
+                if denyIfLocked(xFile) then return end
                 return fs.remove(xFile)
             end 
         },

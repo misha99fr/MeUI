@@ -50,6 +50,13 @@ local graphics = {
       scrollBarFront = 0x00FF00,
       scrollBarBack = 0xFF0000,
     },
+    warningWindow = {
+      foreground = 0xFFFFFF,
+      background = 0xCC3333,
+      buttonFore = 0xFFFFFF,
+      buttonBack = 0x991F1F,
+      iconFore = 0xFFFFFF,
+    },
     qrCode = {
       white_pixel = 0xFFFFFF,
       black_pixel = 0x000000,
@@ -95,6 +102,7 @@ function graphics.drawMenu()
   local sW,sH = buffer.getResolution()	
   local menu = {
     {name = core.getLanguagePackages().OS_settings,callback = function() return "/TabletOS/Apps/Settings.pkg" end},
+    {name = "Заметки",callback = function() return "/TabletOS/Apps/Notes.pkg" end},
     {name = core.getLanguagePackages().OS_shutdown,contextMenu = {
       {name=core.getLanguagePackages().OS_lock,callback=function() screenLock() return false end},
       {name=core.getLanguagePackages().OS_reboot, callback = function() return "/bin/reboot.lua" end},
@@ -177,6 +185,8 @@ function graphics.drawBars(options)
   do
     local charge = math.floor(computer.energy()/computer.maxEnergy()*100+0.5)
     local str = braileSymbol(1,1,1,1,1,1,1,1) .. braileSymbol(1,1,1,1,1,1,1,1) .. braileSymbol(1,1,1,1,1,1,1,1) .. braileSymbol(0,1,1,0,0,0,0,0) .. tostring(charge) .. "%"
+    if core.settings.powerSaveMode == "max" then str = "[ЭКО] " .. str
+    elseif core.settings.powerSaveMode == "medium" then str = "[эко] " .. str end
     core.memorySpectre()
     local RAM = "RAM:" .. text.padLeft(tostring(math.floor(computer.freeMemory()/computer.totalMemory()*100+0.5)),3) .. "%"
     if core.lowMemory then RAM = "RAM: LOW" end
@@ -291,12 +301,12 @@ function graphics.processStatusBar(x,y)
     buffer.drawChanges()
   end
   local function memorySpectre()
-    if core.lowMemory then
+    if core.shouldDisableAnimations() then
       noAnimations = true
       screen = nil
     end
   end
-  if not core.lowMemory then
+  if not core.shouldDisableAnimations() then
     screen = buffer.copy(1,copyY,sW,sH)
   else
     noAnimations = true
@@ -706,6 +716,68 @@ function graphics.drawInfo(label,strTbl,toQrCodeStringTable)
             if type(key) == "string" then word = key end
             local start, _end = unicode.find(line,word)
             --TabletOSGraphics.drawInfo("123",{"echo","http"},{echo="123"})
+            if start then
+              if graphics.clickedAtArea(x+start,e[4],x+_end,e[4],e[3],e[4]) then
+                graphics.drawQRCodeWindow(value)
+              end
+            end
+          end
+        end
+      end
+    elseif e[1] == "touch" then
+      if not graphics.clickedAtArea(x,y,x+w-1,y+h-1,e[3],e[4]) then break end
+    elseif e[1] == "key_down" and e[4] == 28 then break end
+  end
+  buffer.paste(x,y,screen)
+  graphics.drawChanges()
+end
+
+-- API предупреждений: модальное окно с "!" перед заголовком, для важных
+-- сообщений ("У вас осталось 10% заряда", "Устройство перегревается" и т.п.)
+-- Пример вызова:
+--   graphics.drawWarning("Низкий заряд", {"У вас осталось 10% заряда."})
+-- qrcodewords - опционально, как в drawInfo.
+function graphics.drawWarning(label,strTbl,toQrCodeStringTable)
+  if type(strTbl) == "string" then strTbl = {strTbl} end
+  -- Регистрируем в общем списке уведомлений (если они не отключены),
+  -- чтобы предупреждение осталось видно в центре уведомлений и после закрытия.
+  if core.newWarning then
+    core.newWarning(label,table.concat(strTbl," "),toQrCodeStringTable)
+  end
+
+  local sW,sH = buffer.getResolution()
+  local fullLabel = "! " .. label
+  if unicode.len(fullLabel) > sW then
+    fullLabel = unicode.sub(fullLabel,1,sW-1) .. "…"
+  end
+  local h = #strTbl + 2
+  local w = unicode.len(fullLabel)+2
+  for _, str in pairs(strTbl) do
+    w = math.max(w,unicode.len(str)+2)
+  end
+  w = w+w%2
+  local x,y = (sW-w)/2+1,(sH-h)/2+1
+  x,y,w,h = math.floor(x+0.5),math.floor(y+0.5),math.floor(w+0.5),math.floor(h+0.5)
+  local screen = buffer.copy(x,y,w,h)
+  buffer.drawRectangle(x,y,w,h,graphics.theme.warningWindow.background,0x0," ")
+  for i = 1, #strTbl do
+    buffer.drawText(x+1,y+i,graphics.theme.warningWindow.foreground,strTbl[i])
+  end
+  graphics.drawButton(x,y,w,1,fullLabel,graphics.theme.warningWindow.background,graphics.theme.warningWindow.foreground)
+  local checkTouch = graphics.drawButton(x,y+h-1,w,1,core.getLanguagePackages().OS_close,graphics.theme.warningWindow.buttonBack,graphics.theme.warningWindow.buttonFore)
+  graphics.drawChanges()
+  while true do
+    local e = {event.pull(0.5)}
+    if e[1] == "drop" then
+      if checkTouch(e[3],e[4]) then
+        break
+      elseif toQrCodeStringTable and graphics.clickedAtArea(x,y,x+w-1,y+h-1,e[3],e[4]) then
+        local line = strTbl[e[4]-y]
+        if line then
+          for key, value in pairs(toQrCodeStringTable) do
+            local word = value
+            if type(key) == "string" then word = key end
+            local start, _end = unicode.find(line,word)
             if start then
               if graphics.clickedAtArea(x+start,e[4],x+_end,e[4],e[3],e[4]) then
                 graphics.drawQRCodeWindow(value)
